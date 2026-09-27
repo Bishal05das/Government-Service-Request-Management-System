@@ -1,5 +1,6 @@
+from django.conf import settings
 from django.contrib.auth import password_validation
-from rest_framework import serializers
+from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
@@ -9,8 +10,8 @@ from .models import Role, User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "email", "first_name", "last_name", "role", "date_joined"]
-        read_only_fields = ["id", "email", "role", "date_joined"]
+        fields = ["id", "email", "first_name", "last_name", "role", "is_email_verified", "date_joined"]
+        read_only_fields = ["id", "email", "role", "is_email_verified", "date_joined"]
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -47,7 +48,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "email", "password", "first_name", "last_name", "role", "is_active",
-                  "date_joined", "last_login"]
+                  "is_email_verified", "date_joined", "last_login"]
         read_only_fields = ["id", "date_joined", "last_login"]
 
     def validate_email(self, value):
@@ -72,6 +73,8 @@ class AdminUserSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # Accounts created by an admin are trusted, so they are verified unless stated otherwise.
+        validated_data.setdefault("is_email_verified", True)
         return User.objects.create_user(**validated_data)
 
     def update(self, instance, validated_data):
@@ -89,7 +92,14 @@ class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         # Emails are stored lower-cased, so match logins case-insensitively.
         attrs[self.username_field] = attrs[self.username_field].strip().lower()
-        return super().validate(attrs)
+        data = super().validate(attrs)
+        # Checked only after the password matched, so it doesn't reveal which emails exist.
+        if settings.EMAIL_VERIFICATION_REQUIRED and not self.user.is_email_verified:
+            raise exceptions.AuthenticationFailed(
+                "Email address is not verified. Check your inbox or request a new link.",
+                code="email_not_verified",
+            )
+        return data
 
     @classmethod
     def get_token(cls, user):
@@ -107,3 +117,11 @@ class LogoutSerializer(serializers.Serializer):
             RefreshToken(self.validated_data["refresh"]).blacklist()
         except TokenError as exc:
             raise serializers.ValidationError({"refresh": str(exc)})
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()

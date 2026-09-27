@@ -191,3 +191,7 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "Service Desk <no-reply@gsr.local>")
+
+# Citizens must verify their email before they can log in.
+EMAIL_VERIFICATION_REQUIRED = env_bool("EMAIL_VERIFICATION_REQUIRED", True)
+EMAIL_VERIFICATION_TOKEN_HOURS = int(env("EMAIL_VERIFICATION_TOKEN_HOURS", "24"))

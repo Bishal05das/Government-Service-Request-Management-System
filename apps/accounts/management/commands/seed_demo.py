@@ -30,7 +30,7 @@ class Command(BaseCommand):
         for email, role, first_name, last_name in DEMO_USERS:
             user, created = User.objects.get_or_create(
                 email=email,
-                defaults={"role": role, "first_name": first_name, "last_name": last_name,
+                defaults={"role": role, "first_name": first_name, "last_name": last_name, "is_email_verified": True,
                           "is_staff": role == Role.ADMIN, "is_superuser": role == Role.ADMIN},
             )
             if created:

@@ -35,6 +35,7 @@ def make_user(db):
         kwargs.setdefault("email", f"{role.lower()}{n}@example.com")
         kwargs.setdefault("first_name", role.title())
         kwargs.setdefault("last_name", str(n))
+        kwargs.setdefault("is_email_verified", True)
         return User.objects.create_user(password=PASSWORD, role=role, **kwargs)
 
     return _make_user
