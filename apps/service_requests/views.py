@@ -1,5 +1,5 @@
 from django.db import transaction
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,6 +10,7 @@ from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .serializers import (
     AssignOfficerSerializer,
+    CommentSerializer,
     ServiceRequestDetailSerializer,
     ServiceRequestSerializer,
     StatusChangeInputSerializer,
@@ -44,6 +45,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return StatusChangeInputSerializer
         if self.action == "assign":
             return AssignOfficerSerializer
+        if self.action == "comments":
+            return CommentSerializer
         return ServiceRequestSerializer
 
     @transaction.atomic
@@ -76,6 +79,20 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         assign_officer(service_request, serializer.validated_data["officer"], request.user)
         return self._detail_response(service_request)
+
+    @action(detail=True, methods=["get", "post"])
+    def comments(self, request, pk=None):
+        """List or add comments. Anyone who can view the request can take part."""
+        service_request = self.get_object()
+        if request.method == "GET":
+            comments = service_request.comments.select_related("author")
+            page = self.paginate_queryset(comments)
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(service_request=service_request, author=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def _detail_response(self, service_request):
         service_request = self.get_queryset().get(pk=service_request.pk)
