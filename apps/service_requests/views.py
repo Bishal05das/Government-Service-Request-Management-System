@@ -1,6 +1,8 @@
 from django.db import transaction
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -62,6 +64,7 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         service_request = serializer.save(citizen=self.request.user)
         record_status_change(service_request, "", self.request.user)
 
+    @extend_schema(request=StatusChangeInputSerializer, responses=ServiceRequestDetailSerializer)
     @action(detail=True, methods=["post"], url_path="status")
     def change_status(self, request, pk=None):
         """Move the request through its workflow (see `allowed_transitions` on the detail view)."""
@@ -78,6 +81,7 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         return self._detail_response(service_request)
 
+    @extend_schema(request=AssignOfficerSerializer, responses=ServiceRequestDetailSerializer)
     @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
     def assign(self, request, pk=None):
         """Admin only: assign or reassign an active officer to the request."""
@@ -88,6 +92,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         assign_officer(service_request, serializer.validated_data["officer"], request.user)
         return self._detail_response(service_request)
 
+    @extend_schema(methods=["GET"], responses=CommentSerializer(many=True))
+    @extend_schema(methods=["POST"], request=CommentSerializer, responses={201: CommentSerializer})
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
         """List or add comments. Anyone who can view the request can take part."""
@@ -102,6 +108,9 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer.save(service_request=service_request, author=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(methods=["GET"], responses=AttachmentSerializer(many=True))
+    @extend_schema(methods=["POST"], request={"multipart/form-data": AttachmentSerializer},
+                   responses={201: AttachmentSerializer})
     @action(detail=True, methods=["get", "post"], parser_classes=[MultiPartParser, FormParser, JSONParser])
     def attachments(self, request, pk=None):
         """List attachments, or upload one as multipart/form-data (field name: `file`)."""
@@ -116,6 +125,7 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer.save(service_request=service_request, uploaded_by=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
     @action(detail=True, methods=["get"], url_path=r"attachments/(?P<attachment_id>\d+)/download")
     def download_attachment(self, request, pk=None, attachment_id=None):
         """Stream an attachment. Files are never served publicly, only through this check."""
@@ -138,5 +148,6 @@ class StatisticsView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT, tags=["admin"])
     def get(self, request):
         return Response(build_statistics())
