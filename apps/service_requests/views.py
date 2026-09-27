@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdmin
 
+from .notifications import notify_new_comment
 from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .statistics import build_statistics
@@ -105,7 +106,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(service_request=service_request, author=request.user)
+        comment = serializer.save(service_request=service_request, author=request.user)
+        notify_new_comment(comment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(methods=["GET"], responses=AttachmentSerializer(many=True))
