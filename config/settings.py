@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.categories",
     "apps.service_requests",
     "apps.notifications",
+    "apps.audit",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
