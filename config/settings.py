@@ -190,6 +190,7 @@ EMAIL_PORT = int(env("EMAIL_PORT", "25"))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
+EMAIL_TIMEOUT = int(env("EMAIL_TIMEOUT", "15"))
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "Service Desk <no-reply@gsr.local>")
 
 # Citizens must verify their email before they can log in.
