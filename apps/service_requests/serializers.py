@@ -1,9 +1,14 @@
+import mimetypes
+from pathlib import Path
+
+from django.conf import settings
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.accounts.models import Role, User
 from apps.categories.models import Category
 
-from .models import Comment, ServiceRequest, Status, StatusChange
+from .models import Attachment, Comment, ServiceRequest, Status, StatusChange
 from .workflow import allowed_transitions
 
 
@@ -82,3 +87,39 @@ class CommentSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise serializers.ValidationError("Comment cannot be empty.")
         return value.strip()
+
+
+class AttachmentSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True)
+    uploaded_by = UserSummarySerializer(read_only=True)
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Attachment
+        fields = ["id", "file", "original_name", "content_type", "size", "uploaded_by",
+                  "download_url", "created_at"]
+        read_only_fields = ["id", "original_name", "content_type", "size", "uploaded_by",
+                            "download_url", "created_at"]
+
+    def get_download_url(self, obj) -> str:
+        url = reverse("request-download-attachment", args=[obj.service_request_id, obj.pk])
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
+    def validate_file(self, file):
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        allowed = settings.ATTACHMENT_ALLOWED_EXTENSIONS
+        if extension not in allowed:
+            raise serializers.ValidationError(f"Unsupported file type. Allowed: {', '.join(allowed)}.")
+        max_bytes = settings.ATTACHMENT_MAX_SIZE_MB * 1024 * 1024
+        if file.size > max_bytes:
+            raise serializers.ValidationError(f"File exceeds {settings.ATTACHMENT_MAX_SIZE_MB} MB.")
+        return file
+
+    def create(self, validated_data):
+        file = validated_data["file"]
+        validated_data["original_name"] = Path(file.name).name[:255]
+        # Derive the type from the (validated) extension rather than trusting the client header.
+        validated_data["content_type"] = mimetypes.guess_type(validated_data["original_name"])[0] or ""
+        validated_data["size"] = file.size
+        return super().create(validated_data)
