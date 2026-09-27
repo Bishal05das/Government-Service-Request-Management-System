@@ -39,6 +39,50 @@ class RegisterSerializer(serializers.ModelSerializer):
         return User.objects.create_user(role=Role.CITIZEN, **validated_data)
 
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    """Used by admins to create staff accounts and manage roles / activation."""
+
+    password = serializers.CharField(write_only=True, required=False, style={"input_type": "password"})
+
+    class Meta:
+        model = User
+        fields = ["id", "email", "password", "first_name", "last_name", "role", "is_active",
+                  "date_joined", "last_login"]
+        read_only_fields = ["id", "date_joined", "last_login"]
+
+    def validate_email(self, value):
+        value = User.objects.normalize_email(value).lower()
+        clash = User.objects.filter(email__iexact=value)
+        if self.instance:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get("password"):
+            raise serializers.ValidationError({"password": "This field is required."})
+        if attrs.get("password"):
+            password_validation.validate_password(attrs["password"], self.instance)
+
+        request = self.context.get("request")
+        if self.instance and request and self.instance.pk == request.user.pk:
+            if attrs.get("role", self.instance.role) != Role.ADMIN or attrs.get("is_active") is False:
+                raise serializers.ValidationError("Admins cannot demote or deactivate themselves.")
+        return attrs
+
+    def create(self, validated_data):
+        return User.objects.create_user(**validated_data)
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        instance = super().update(instance, validated_data)
+        if password:
+            instance.set_password(password)
+            instance.save(update_fields=["password"])
+        return instance
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     """Issues an access/refresh pair; the role is embedded as a claim for clients."""
 

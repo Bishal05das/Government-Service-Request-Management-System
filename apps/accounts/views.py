@@ -1,10 +1,30 @@
-from rest_framework import generics, status
+from rest_framework import generics, mixins, status, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .serializers import LoginSerializer, LogoutSerializer, RegisterSerializer, UserSerializer
+from .models import User
+from .permissions import IsAdmin
+from .serializers import (
+    AdminUserSerializer,
+    LoginSerializer,
+    LogoutSerializer,
+    RegisterSerializer,
+    UserSerializer,
+)
+
+
+class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                  mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """Admin-only user management. Users are deactivated rather than deleted."""
+
+    queryset = User.objects.all()
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAdmin]
+    filterset_fields = ["role", "is_active"]
+    search_fields = ["email", "first_name", "last_name"]
+    ordering_fields = ["id", "email", "date_joined"]
 
 
 class RegisterView(generics.CreateAPIView):
