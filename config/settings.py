@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "django_filters",
+    "drf_spectacular",
     # Local apps
     "apps.common",
     "apps.accounts",
@@ -123,6 +124,23 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Government Service Request Management API",
+    "DESCRIPTION": (
+        "Citizens submit service requests, officers process them and admins manage the system.\n\n"
+        "Authenticate with `POST /api/v1/auth/login/` and send the access token as "
+        "`Authorization: Bearer <token>`."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "ENUM_NAME_OVERRIDES": {
+        "RequestStatusEnum": "apps.service_requests.models.Status",
+    },
 }
 
 SIMPLE_JWT = {
