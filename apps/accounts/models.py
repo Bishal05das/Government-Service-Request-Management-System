@@ -30,6 +30,7 @@ class UserManager(BaseUserManager):
         extra_fields["role"] = Role.ADMIN
         extra_fields["is_staff"] = True
         extra_fields["is_superuser"] = True
+        extra_fields["is_email_verified"] = True
         return self._create_user(email, password, **extra_fields)
 
 
@@ -39,6 +40,7 @@ class User(AbstractUser):
     username = None
     email = models.EmailField("email address", unique=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.CITIZEN)
+    is_email_verified = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

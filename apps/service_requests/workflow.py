@@ -16,6 +16,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.accounts.models import Role
 
 from .models import ServiceRequest, Status, StatusChange
+from .notifications import notify_officer_assigned, notify_status_changed
 
 OWNER = "owner"
 ASSIGNED_OFFICER = "assigned_officer"
@@ -87,6 +88,7 @@ def change_status(service_request, new_status, user, note=""):
     service_request.save(update_fields=update_fields)
 
     record_status_change(service_request, current, user, note)
+    notify_status_changed(service_request, current, user, note)
     return service_request
 
 
@@ -118,4 +120,5 @@ def assign_officer(service_request, officer, user):
 
     if previous_status != service_request.status:
         record_status_change(service_request, previous_status, user, f"Assigned to {officer.email}")
+    notify_officer_assigned(service_request, user)
     return service_request
