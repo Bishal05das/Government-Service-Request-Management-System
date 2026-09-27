@@ -51,3 +51,23 @@ def client_for():
         return client
 
     return _client_for
+
+
+@pytest.fixture
+def category(db):
+    from apps.categories.models import Category
+
+    return Category.objects.create(name="Water Supply")
+
+
+@pytest.fixture
+def make_request(category):
+    from apps.service_requests.models import ServiceRequest
+
+    def _make_request(citizen, **kwargs):
+        kwargs.setdefault("category", category)
+        kwargs.setdefault("title", "Broken water pipe")
+        kwargs.setdefault("description", "The main pipe on Road 5 is leaking.")
+        return ServiceRequest.objects.create(citizen=citizen, **kwargs)
+
+    return _make_request
