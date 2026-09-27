@@ -3,7 +3,8 @@ from rest_framework import serializers
 from apps.accounts.models import User
 from apps.categories.models import Category
 
-from .models import ServiceRequest, StatusChange
+from .models import ServiceRequest, Status, StatusChange
+from .workflow import allowed_transitions
 
 
 class UserSummarySerializer(serializers.ModelSerializer):
@@ -47,6 +48,15 @@ class ServiceRequestSerializer(serializers.ModelSerializer):
 
 class ServiceRequestDetailSerializer(ServiceRequestSerializer):
     status_history = StatusChangeSerializer(many=True, read_only=True)
+    allowed_transitions = serializers.SerializerMethodField()
 
     class Meta(ServiceRequestSerializer.Meta):
-        fields = ServiceRequestSerializer.Meta.fields + ["status_history"]
+        fields = ServiceRequestSerializer.Meta.fields + ["status_history", "allowed_transitions"]
+
+    def get_allowed_transitions(self, obj) -> list[str]:
+        return allowed_transitions(obj, self.context["request"].user)
+
+
+class StatusChangeInputSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=Status.choices)
+    note = serializers.CharField(required=False, allow_blank=True, default="")
