@@ -7,6 +7,7 @@ api_v1 = [
     path("", include("apps.common.urls")),
     path("", include("apps.accounts.urls")),
     path("", include("apps.categories.urls")),
+    path("", include("apps.service_requests.urls")),
 ]
 
 urlpatterns = [
