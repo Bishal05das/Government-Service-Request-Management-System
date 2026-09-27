@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.accounts.models import Role, User
 from apps.categories.models import Category
 
-from .models import ServiceRequest, Status, StatusChange
+from .models import Comment, ServiceRequest, Status, StatusChange
 from .workflow import allowed_transitions
 
 
@@ -67,3 +67,18 @@ class AssignOfficerSerializer(serializers.Serializer):
         queryset=User.objects.filter(role=Role.OFFICER, is_active=True),
         error_messages={"does_not_exist": "No active officer with id {pk_value}."},
     )
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    author = UserSummarySerializer(read_only=True)
+    author_role = serializers.CharField(source="author.role", read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ["id", "author", "author_role", "body", "created_at"]
+        read_only_fields = ["id", "author", "author_role", "created_at"]
+
+    def validate_body(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Comment cannot be empty.")
+        return value.strip()
