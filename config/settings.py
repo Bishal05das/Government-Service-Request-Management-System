@@ -163,3 +163,21 @@ ATTACHMENT_ALLOWED_EXTENSIONS = env_list(
     "ATTACHMENT_ALLOWED_EXTENSIONS", "pdf,jpg,jpeg,png,doc,docx,txt"
 )
 DATA_UPLOAD_MAX_MEMORY_SIZE = ATTACHMENT_MAX_SIZE_MB * 1024 * 1024 + 1024 * 1024
+
+# Redis: Celery broker/result backend and shared cache
+REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("CACHE_URL", REDIS_URL),
+    }
+}
+
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TIMEZONE = TIME_ZONE
