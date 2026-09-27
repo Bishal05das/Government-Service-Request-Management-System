@@ -1,6 +1,9 @@
 from django.db import transaction
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -10,6 +13,7 @@ from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .serializers import (
     AssignOfficerSerializer,
+    AttachmentSerializer,
     CommentSerializer,
     ServiceRequestDetailSerializer,
     ServiceRequestSerializer,
@@ -47,6 +51,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return AssignOfficerSerializer
         if self.action == "comments":
             return CommentSerializer
+        if self.action == "attachments":
+            return AttachmentSerializer
         return ServiceRequestSerializer
 
     @transaction.atomic
@@ -93,6 +99,32 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer.is_valid(raise_exception=True)
         serializer.save(service_request=service_request, author=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "post"], parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def attachments(self, request, pk=None):
+        """List attachments, or upload one as multipart/form-data (field name: `file`)."""
+        service_request = self.get_object()
+        if request.method == "GET":
+            attachments = service_request.attachments.select_related("uploaded_by")
+            page = self.paginate_queryset(attachments)
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(service_request=service_request, uploaded_by=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path=r"attachments/(?P<attachment_id>\d+)/download")
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Stream an attachment. Files are never served publicly, only through this check."""
+        service_request = self.get_object()
+        attachment = get_object_or_404(service_request.attachments, pk=attachment_id)
+        return FileResponse(
+            attachment.file.open("rb"),
+            as_attachment=True,
+            filename=attachment.original_name,
+            content_type=attachment.content_type or "application/octet-stream",
+        )
 
     def _detail_response(self, service_request):
         service_request = self.get_queryset().get(pk=service_request.pk)

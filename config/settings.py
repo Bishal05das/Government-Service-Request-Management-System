@@ -133,3 +133,10 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# File attachments on service requests
+ATTACHMENT_MAX_SIZE_MB = int(env("ATTACHMENT_MAX_SIZE_MB", "10"))
+ATTACHMENT_ALLOWED_EXTENSIONS = env_list(
+    "ATTACHMENT_ALLOWED_EXTENSIONS", "pdf,jpg,jpeg,png,doc,docx,txt"
+)
+DATA_UPLOAD_MAX_MEMORY_SIZE = ATTACHMENT_MAX_SIZE_MB * 1024 * 1024 + 1024 * 1024
