@@ -3,19 +3,21 @@ from rest_framework import mixins, viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from .models import StatusChange
-from .permissions import CanCreateRequest
+from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .serializers import ServiceRequestDetailSerializer, ServiceRequestSerializer
 
 
 class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
-                            mixins.CreateModelMixin, viewsets.GenericViewSet):
+                            mixins.CreateModelMixin, mixins.UpdateModelMixin,
+                            viewsets.GenericViewSet):
     """
     Citizens submit and track their own requests, officers work on requests
     assigned to them, admins see everything.
     """
 
-    permission_classes = [IsAuthenticated, CanCreateRequest]
+    permission_classes = [IsAuthenticated, CanCreateRequest, CanEditRequestDetails]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = ["status", "priority", "category", "assigned_officer", "citizen"]
     search_fields = ["title", "description"]
     ordering_fields = ["created_at", "updated_at", "priority_rank", "status"]
