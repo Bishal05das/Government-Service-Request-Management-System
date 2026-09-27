@@ -11,7 +11,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdmin
+from apps.audit.models import AuditAction
+from apps.audit.services import diff, record
 
+from .notifications import notify_new_comment
 from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .statistics import build_statistics
@@ -46,6 +49,12 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             queryset = queryset.prefetch_related("status_history__changed_by")
         return queryset
 
+    def get_throttles(self):
+        # Uploads are expensive (disk + bandwidth), so they get their own tighter budget.
+        if self.action == "attachments" and self.request.method == "POST":
+            self.throttle_scope = "uploads"
+        return super().get_throttles()
+
     def get_serializer_class(self):
         if self.action == "retrieve":
             return ServiceRequestDetailSerializer
@@ -63,6 +72,15 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     def perform_create(self, serializer):
         service_request = serializer.save(citizen=self.request.user)
         record_status_change(service_request, "", self.request.user)
+        record(AuditAction.REQUEST_CREATED, request=self.request, target=service_request,
+               changes={"title": service_request.title, "category": service_request.category_id,
+                        "priority": service_request.priority})
+
+    def perform_update(self, serializer):
+        changes = diff(serializer.instance, serializer.validated_data)
+        service_request = serializer.save()
+        if changes:
+            record(AuditAction.REQUEST_UPDATED, request=self.request, target=service_request, changes=changes)
 
     @extend_schema(request=StatusChangeInputSerializer, responses=ServiceRequestDetailSerializer)
     @action(detail=True, methods=["post"], url_path="status")
@@ -72,13 +90,16 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        change_status(
+        previous = service_request.status
+        updated = change_status(
             service_request,
             serializer.validated_data["status"],
             request.user,
             serializer.validated_data["note"],
         )
-
+        record(AuditAction.REQUEST_STATUS_CHANGED, request=request, target=updated,
+               changes={"status": {"from": previous, "to": updated.status},
+                        "note": serializer.validated_data["note"]})
         return self._detail_response(service_request)
 
     @extend_schema(request=AssignOfficerSerializer, responses=ServiceRequestDetailSerializer)
@@ -89,7 +110,10 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        assign_officer(service_request, serializer.validated_data["officer"], request.user)
+        previous_officer = service_request.assigned_officer_id
+        updated = assign_officer(service_request, serializer.validated_data["officer"], request.user)
+        record(AuditAction.OFFICER_ASSIGNED, request=request, target=updated,
+               changes={"assigned_officer": {"from": previous_officer, "to": updated.assigned_officer_id}})
         return self._detail_response(service_request)
 
     @extend_schema(methods=["GET"], responses=CommentSerializer(many=True))
@@ -105,7 +129,10 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(service_request=service_request, author=request.user)
+        comment = serializer.save(service_request=service_request, author=request.user)
+        record(AuditAction.COMMENT_ADDED, request=request, target=service_request,
+               changes={"comment_id": comment.pk})
+        notify_new_comment(comment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(methods=["GET"], responses=AttachmentSerializer(many=True))
@@ -122,7 +149,10 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(service_request=service_request, uploaded_by=request.user)
+        attachment = serializer.save(service_request=service_request, uploaded_by=request.user)
+        record(AuditAction.ATTACHMENT_UPLOADED, request=request, target=service_request,
+               changes={"attachment_id": attachment.pk, "name": attachment.original_name,
+                        "size": attachment.size})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
@@ -131,6 +161,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         """Stream an attachment. Files are never served publicly, only through this check."""
         service_request = self.get_object()
         attachment = get_object_or_404(service_request.attachments, pk=attachment_id)
+        record(AuditAction.ATTACHMENT_DOWNLOADED, request=request, target=service_request,
+               changes={"attachment_id": attachment.pk})
         return FileResponse(
             attachment.file.open("rb"),
             as_attachment=True,

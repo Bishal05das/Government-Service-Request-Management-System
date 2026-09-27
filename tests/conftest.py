@@ -9,6 +9,19 @@ PASSWORD = "S3cure-pass-123"
 _seq = itertools.count(1)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_infrastructure(settings):
+    """Run without Redis: in-memory cache and Celery tasks executed inline."""
+    settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    # Celery reads CELERY_* straight from django.conf.settings, so overriding here takes effect.
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+    yield
+    from django.core.cache import cache
+
+    cache.clear()
+
+
 @pytest.fixture
 def api_client():
     return APIClient()
@@ -21,6 +34,7 @@ def make_user(db):
         kwargs.setdefault("email", f"{role.lower()}{n}@example.com")
         kwargs.setdefault("first_name", role.title())
         kwargs.setdefault("last_name", str(n))
+        kwargs.setdefault("is_email_verified", True)
         return User.objects.create_user(password=PASSWORD, role=role, **kwargs)
 
     return _make_user

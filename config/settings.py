@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.categories",
     "apps.service_requests",
+    "apps.notifications",
+    "apps.audit",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -130,6 +132,24 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Throttle counters live in the default (Redis) cache, shared by all workers.
+    # ScopedRateThrottle only applies to views that declare a throttle_scope.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("THROTTLE_ANON", "60/minute"),
+        "user": env("THROTTLE_USER", "1000/hour"),
+        "login": env("THROTTLE_LOGIN", "5/minute"),
+        "register": env("THROTTLE_REGISTER", "10/hour"),
+        "email": env("THROTTLE_EMAIL", "5/hour"),
+        "uploads": env("THROTTLE_UPLOADS", "30/hour"),
+    },
+    # Number of trusted reverse proxies in front of the API. 0 means the client IP is
+    # REMOTE_ADDR and X-Forwarded-For is ignored, so it cannot be spoofed to dodge limits.
+    "NUM_PROXIES": int(env("NUM_PROXIES", "0")),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -163,3 +183,35 @@ ATTACHMENT_ALLOWED_EXTENSIONS = env_list(
     "ATTACHMENT_ALLOWED_EXTENSIONS", "pdf,jpg,jpeg,png,doc,docx,txt"
 )
 DATA_UPLOAD_MAX_MEMORY_SIZE = ATTACHMENT_MAX_SIZE_MB * 1024 * 1024 + 1024 * 1024
+
+# Redis: Celery broker/result backend and shared cache
+REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("CACHE_URL", REDIS_URL),
+    }
+}
+
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TIMEZONE = TIME_ZONE
+
+# Email
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(env("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
+EMAIL_TIMEOUT = int(env("EMAIL_TIMEOUT", "15"))
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "Service Desk <no-reply@gsr.local>")
+
+# Citizens must verify their email before they can log in.
+EMAIL_VERIFICATION_REQUIRED = env_bool("EMAIL_VERIFICATION_REQUIRED", True)
+EMAIL_VERIFICATION_TOKEN_HOURS = int(env("EMAIL_VERIFICATION_TOKEN_HOURS", "24"))

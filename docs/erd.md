@@ -11,6 +11,7 @@ erDiagram
     USER ||--o{ STATUS_CHANGE : "changed by"
     USER ||--o{ COMMENT : writes
     USER ||--o{ ATTACHMENT : uploads
+    USER |o--o{ AUDIT_LOG : "performs (null = anonymous)"
 
     USER {
         bigint id PK
@@ -19,6 +20,7 @@ erDiagram
         varchar first_name
         varchar last_name
         varchar role "CITIZEN | OFFICER | ADMIN"
+        boolean is_email_verified
         boolean is_active
         boolean is_staff
         boolean is_superuser
@@ -78,12 +80,27 @@ erDiagram
         bigint size "bytes"
         timestamp created_at
     }
+
+    AUDIT_LOG {
+        bigint id PK
+        bigint actor_id FK "nullable"
+        varchar action "LOGIN_SUCCEEDED, REQUEST_STATUS_CHANGED, ..."
+        varchar target_type "model name, e.g. servicerequest"
+        varchar target_id
+        jsonb changes "field diffs, never passwords"
+        inet ip_address
+        timestamp created_at "indexed"
+    }
 ```
 
 ## Notes
 
 - **Deletion policy**: users, categories in use and requests are never hard-deleted (`PROTECT` foreign keys).
   Users are deactivated; categories are deactivated; requests end in `CLOSED`, `REJECTED` or `CANCELLED`.
-- **Indexes**: `service_request.status` and `service_request.priority` are indexed for list filtering and statistics.
+- **Indexes**: `service_request.status` and `service_request.priority` are indexed for list filtering and statistics;
+  `audit_log` is indexed on `created_at`, `action` and `(target_type, target_id)`.
+- **Audit log** is a generic log: `target_type` + `target_id` point at any row (user, category,
+  service request) without a hard foreign key, so entries survive and stay immutable.
+- **Email verification** needs no table: tokens are signed (`django.core.signing`) and time-limited.
 - JWT refresh-token blacklisting uses the `token_blacklist` tables provided by `djangorestframework-simplejwt`
   (`OutstandingToken`, `BlacklistedToken`), omitted above for clarity.
