@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # Local apps
     "apps.common",
     "apps.accounts",
+    "apps.categories",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
