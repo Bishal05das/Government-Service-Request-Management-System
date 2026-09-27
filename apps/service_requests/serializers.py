@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.accounts.models import User
+from apps.accounts.models import Role, User
 from apps.categories.models import Category
 
 from .models import ServiceRequest, Status, StatusChange
@@ -60,3 +60,10 @@ class ServiceRequestDetailSerializer(ServiceRequestSerializer):
 class StatusChangeInputSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Status.choices)
     note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class AssignOfficerSerializer(serializers.Serializer):
+    officer = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(role=Role.OFFICER, is_active=True),
+        error_messages={"does_not_exist": "No active officer with id {pk_value}."},
+    )

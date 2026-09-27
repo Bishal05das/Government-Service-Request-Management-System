@@ -88,3 +88,34 @@ def change_status(service_request, new_status, user, note=""):
 
     record_status_change(service_request, current, user, note)
     return service_request
+
+
+ASSIGNABLE_STATUSES = {Status.SUBMITTED, Status.ASSIGNED, Status.IN_PROGRESS}
+
+
+@transaction.atomic
+def assign_officer(service_request, officer, user):
+    """
+    Assign (or reassign) an officer. The first assignment moves the request
+    from SUBMITTED to ASSIGNED; reassignment keeps the current status.
+    """
+    if user.role != Role.ADMIN:
+        raise PermissionDenied("Only admins can assign officers.")
+    service_request = ServiceRequest.objects.select_for_update().get(pk=service_request.pk)
+    if service_request.status not in ASSIGNABLE_STATUSES:
+        raise ValidationError({"status": f"Cannot assign an officer to a {service_request.status} request."})
+    if officer.role != Role.OFFICER or not officer.is_active:
+        raise ValidationError({"officer": "The selected user is not an active officer."})
+
+    previous_status = service_request.status
+    service_request.assigned_officer = officer
+    service_request.assigned_at = timezone.now()
+    update_fields = ["assigned_officer", "assigned_at", "updated_at"]
+    if previous_status == Status.SUBMITTED:
+        service_request.status = Status.ASSIGNED
+        update_fields.append("status")
+    service_request.save(update_fields=update_fields)
+
+    if previous_status != service_request.status:
+        record_status_change(service_request, previous_status, user, f"Assigned to {officer.email}")
+    return service_request

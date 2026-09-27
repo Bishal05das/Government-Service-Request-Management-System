@@ -4,14 +4,17 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.accounts.permissions import IsAdmin
+
 from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
 from .serializers import (
+    AssignOfficerSerializer,
     ServiceRequestDetailSerializer,
     ServiceRequestSerializer,
     StatusChangeInputSerializer,
 )
-from .workflow import change_status, record_status_change
+from .workflow import assign_officer, change_status, record_status_change
 
 
 class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
@@ -30,7 +33,7 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         queryset = visible_requests_for(self.request.user)
-        if self.action in ("retrieve", "change_status"):
+        if self.action in ("retrieve", "change_status", "assign"):
             queryset = queryset.prefetch_related("status_history__changed_by")
         return queryset
 
@@ -39,6 +42,8 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return ServiceRequestDetailSerializer
         if self.action == "change_status":
             return StatusChangeInputSerializer
+        if self.action == "assign":
+            return AssignOfficerSerializer
         return ServiceRequestSerializer
 
     @transaction.atomic
@@ -60,5 +65,18 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             serializer.validated_data["note"],
         )
 
+        return self._detail_response(service_request)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
+    def assign(self, request, pk=None):
+        """Admin only: assign or reassign an active officer to the request."""
+        service_request = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        assign_officer(service_request, serializer.validated_data["officer"], request.user)
+        return self._detail_response(service_request)
+
+    def _detail_response(self, service_request):
         service_request = self.get_queryset().get(pk=service_request.pk)
-        return Response(ServiceRequestDetailSerializer(service_request, context={"request": request}).data)
+        return Response(ServiceRequestDetailSerializer(service_request, context={"request": self.request}).data)
