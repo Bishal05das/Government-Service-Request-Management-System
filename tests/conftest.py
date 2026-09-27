@@ -12,11 +12,10 @@ _seq = itertools.count(1)
 @pytest.fixture(autouse=True)
 def _isolated_infrastructure(settings):
     """Run without Redis: in-memory cache and Celery tasks executed inline."""
-    from config.celery import app as celery_app
-
     settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
-    celery_app.conf.task_always_eager = True
-    celery_app.conf.task_eager_propagates = True
+    # Celery reads CELERY_* straight from django.conf.settings, so overriding here takes effect.
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
     yield
     from django.core.cache import cache
 
