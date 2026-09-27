@@ -1,9 +1,13 @@
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, mixins, status, viewsets
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+
+from apps.audit.models import AuditAction
+from apps.audit.services import diff, record
 
 from .models import User
 from .permissions import IsAdmin
@@ -30,6 +34,17 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     search_fields = ["email", "first_name", "last_name"]
     ordering_fields = ["id", "email", "date_joined"]
 
+    def perform_create(self, serializer):
+        user = serializer.save()
+        record(AuditAction.USER_CREATED, request=self.request, target=user,
+               changes={"email": user.email, "role": user.role})
+
+    def perform_update(self, serializer):
+        changes = diff(serializer.instance, serializer.validated_data)
+        user = serializer.save()
+        if changes:
+            record(AuditAction.USER_UPDATED, request=self.request, target=user, changes=changes)
+
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -37,6 +52,7 @@ class RegisterView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         user = serializer.save()
+        record(AuditAction.USER_REGISTERED, request=self.request, actor=user, target=user)
         send_verification_email(user, self.request)
 
 
@@ -64,6 +80,7 @@ class VerifyEmailView(APIView):
         if not user.is_email_verified:
             user.is_email_verified = True
             user.save(update_fields=["is_email_verified"])
+            record(AuditAction.EMAIL_VERIFIED, request=self.request, actor=user, target=user)
         return Response({"detail": "Email verified. You can now log in."})
 
 
@@ -97,6 +114,18 @@ class MeView(generics.RetrieveUpdateAPIView):
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except AuthenticationFailed as exc:
+            record(AuditAction.LOGIN_FAILED, request=request,
+                   changes={"email": str(request.data.get("email", ""))[:254],
+                            "reason": exc.get_codes()})
+            raise
+        record(AuditAction.LOGIN_SUCCEEDED, request=request, actor=serializer.user, target=serializer.user)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
