@@ -132,6 +132,24 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Throttle counters live in the default (Redis) cache, shared by all workers.
+    # ScopedRateThrottle only applies to views that declare a throttle_scope.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("THROTTLE_ANON", "60/minute"),
+        "user": env("THROTTLE_USER", "1000/hour"),
+        "login": env("THROTTLE_LOGIN", "5/minute"),
+        "register": env("THROTTLE_REGISTER", "10/hour"),
+        "email": env("THROTTLE_EMAIL", "5/hour"),
+        "uploads": env("THROTTLE_UPLOADS", "30/hour"),
+    },
+    # Number of trusted reverse proxies in front of the API. 0 means the client IP is
+    # REMOTE_ADDR and X-Forwarded-For is ignored, so it cannot be spoofed to dodge limits.
+    "NUM_PROXIES": int(env("NUM_PROXIES", "0")),
 }
 
 SPECTACULAR_SETTINGS = {
