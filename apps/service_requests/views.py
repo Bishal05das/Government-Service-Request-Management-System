@@ -6,11 +6,13 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdmin
 
 from .permissions import CanCreateRequest, CanEditRequestDetails
 from .selectors import visible_requests_for
+from .statistics import build_statistics
 from .serializers import (
     AssignOfficerSerializer,
     AttachmentSerializer,
@@ -129,3 +131,12 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     def _detail_response(self, service_request):
         service_request = self.get_queryset().get(pk=service_request.pk)
         return Response(ServiceRequestDetailSerializer(service_request, context={"request": self.request}).data)
+
+
+class StatisticsView(APIView):
+    """Admin dashboard figures: request counts, category breakdown and officer workload."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return Response(build_statistics())
