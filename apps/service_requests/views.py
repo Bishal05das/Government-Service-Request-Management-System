@@ -49,6 +49,12 @@ class ServiceRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             queryset = queryset.prefetch_related("status_history__changed_by")
         return queryset
 
+    def get_throttles(self):
+        # Uploads are expensive (disk + bandwidth), so they get their own tighter budget.
+        if self.action == "attachments" and self.request.method == "POST":
+            self.throttle_scope = "uploads"
+        return super().get_throttles()
+
     def get_serializer_class(self):
         if self.action == "retrieve":
             return ServiceRequestDetailSerializer

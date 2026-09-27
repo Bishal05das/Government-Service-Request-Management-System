@@ -49,6 +49,7 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+    throttle_scope = "register"
 
     def perform_create(self, serializer):
         user = serializer.save()
@@ -89,6 +90,7 @@ class ResendVerificationView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = ResendVerificationSerializer
+    throttle_scope = "email"
 
     @extend_schema(request=ResendVerificationSerializer, responses={200: None})
     def post(self, request):
@@ -114,6 +116,7 @@ class MeView(generics.RetrieveUpdateAPIView):
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
+    throttle_scope = "login"
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
